@@ -19,7 +19,7 @@ from io_mcp.tools import Paper
 
 log = logging.getLogger(__name__)
 
-ARXIV_API_URL = "http://export.arxiv.org/api/query"
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 REQUEST_DELAY_SECONDS = 3.0
 DEFAULT_TIMEOUT = 30.0
 
@@ -79,7 +79,9 @@ async def search_arxiv(
 async def _fetch(params: dict) -> str:
     await _rate_limiter.wait()
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=DEFAULT_TIMEOUT, follow_redirects=True
+        ) as client:
             resp = await client.get(ARXIV_API_URL, params=params)
             resp.raise_for_status()
             return resp.text

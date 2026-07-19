@@ -10,3 +10,6 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=@REPO_DIR@
 ExecStart=@IO_MCP_BIN@ digest
+# A free Semantic Scholar API key avoids the shared unauthenticated 429s.
+# Get one at https://www.semanticscholar.org/product/api#api-key then uncomment:
+# Environment=SEMANTIC_SCHOLAR_API_KEY=your-key-here

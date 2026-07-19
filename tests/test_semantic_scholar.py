@@ -1,6 +1,9 @@
-"""Semantic Scholar client tests — parsing and mocked search."""
+"""Semantic Scholar client tests — parsing, mocked search, and 429 retry."""
 
 from __future__ import annotations
+
+import httpx
+import pytest
 
 from io_mcp.tools import semantic_scholar as s2_mod
 
@@ -57,3 +60,69 @@ async def test_search_papers_mocked(monkeypatch):
     papers = await s2_mod.search_papers("gene regulation")
     assert len(papers) == 2
     assert papers[0].id == "2402.12345"
+
+
+class _FakeClient:
+    """AsyncClient stand-in that pops queued responses from a shared list."""
+
+    def __init__(self, queue):
+        self._queue = queue  # shared reference across retry attempts
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url, params=None, headers=None):
+        return self._queue.pop(0)
+
+
+def _resp(status, *, json=None, retry_after=None):
+    headers = {"Retry-After": str(retry_after)} if retry_after is not None else {}
+    return httpx.Response(
+        status,
+        json=json if json is not None else {},
+        headers=headers,
+        request=httpx.Request("GET", s2_mod.S2_BASE + "/paper/search"),
+    )
+
+
+async def test_get_retries_on_429_then_succeeds(monkeypatch):
+    queue = [
+        _resp(429, retry_after=0),          # first attempt: throttled
+        _resp(200, json=SEARCH_RESPONSE),   # retry: success
+    ]
+    monkeypatch.setattr(s2_mod.httpx, "AsyncClient", lambda *a, **k: _FakeClient(queue))
+
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr(s2_mod.asyncio, "sleep", fake_sleep)
+
+    data = await s2_mod._get("/paper/search", {"query": "x"})
+    assert data["total"] == 2
+    assert queue == []          # both responses consumed → exactly one retry
+    assert slept                # backed off at least once
+
+
+async def test_get_raises_after_exhausting_retries(monkeypatch):
+    queue = [_resp(429, retry_after=0) for _ in range(s2_mod.MAX_RETRIES)]
+    monkeypatch.setattr(s2_mod.httpx, "AsyncClient", lambda *a, **k: _FakeClient(queue))
+
+    async def fake_sleep(seconds):
+        return None
+
+    monkeypatch.setattr(s2_mod.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await s2_mod._get("/paper/search", {"query": "x"})
+
+
+def test_api_key_header(monkeypatch):
+    monkeypatch.delenv(s2_mod.API_KEY_ENV, raising=False)
+    assert s2_mod._headers() == {}
+    monkeypatch.setenv(s2_mod.API_KEY_ENV, "secret-key")
+    assert s2_mod._headers() == {"x-api-key": "secret-key"}
