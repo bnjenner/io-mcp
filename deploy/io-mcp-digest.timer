@@ -1,0 +1,17 @@
+# systemd *user* timer: run the paper digest daily at 06:00 local time.
+# Fedora-idiomatic alternative to cron. Installed by deploy/install.sh --timer.
+#
+#   systemctl --user enable --now io-mcp-digest.timer
+#   systemctl --user list-timers io-mcp-digest.timer
+
+[Unit]
+Description=Run io-mcp paper digest daily
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+# Spread load / avoid exact-minute stampede across machines.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

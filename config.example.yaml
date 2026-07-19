@@ -1,0 +1,73 @@
+# ~/.config/io-mcp/config.yaml
+#
+# Any value can be overridden via environment variables with the prefix
+# IO_MCP_ and double-underscore nesting, e.g.:
+#   IO_MCP_OLLAMA__BASE_URL=http://localhost:11434
+#   IO_MCP_NTFY__BASE_URL=http://malleus:8090
+#   IO_MCP_SERVER__PORT=8484
+
+ollama:
+  base_url: "http://localhost:11434"
+  default_model: "mistral:7b"
+  # Per-tool model overrides (optional)
+  models:
+    relevance_scoring: "mistral:7b"
+    summarization: "mistral:7b"
+    log_parsing: "qwen2.5-coder:7b"
+
+ntfy:
+  base_url: "http://ewaste.tailcf15e9.ts.net"
+  default_topic: "io-mcp"
+  # Everything publishes to default_topic. To split notifications across topics
+  # later, add per-category overrides here, e.g.:
+  #   topics:
+  #     papers: "io-mcp-papers"
+  #     homelab: "io-mcp-homelab"
+  topics: {}
+
+research:
+  # Search queries for paper discovery. Each interest carries a display name
+  # plus a query for each API.
+  interests:
+    - name: "Prokaryotic gene regulation"
+      arxiv_query: "cat:q-bio.MN AND (transcription regulation OR promoter OR gene expression)"
+      semantic_scholar_query: "prokaryotic transcription factor binding thermodynamic model"
+    - name: "Statistical mechanics of gene expression"
+      arxiv_query: "cat:q-bio.MN AND (statistical mechanics OR Boltzmann OR thermodynamic model)"
+      semantic_scholar_query: "statistical mechanical model gene expression E. coli"
+    - name: "Bioinformatics methods"
+      arxiv_query: "cat:q-bio.GN AND (RNA-seq OR bioinformatics pipeline)"
+      semantic_scholar_query: "bioinformatics pipeline RNA-seq differential expression"
+
+  # Relevance scoring
+  relevance_threshold: 3  # 1-5 scale; papers >= this get included in the digest
+  max_papers_per_digest: 20
+
+  # User research context (injected into the relevance-scoring prompt)
+  context: |
+    I am a doctoral student studying thermodynamic and statistical mechanical
+    modeling of prokaryotic gene expression in E. coli. My work focuses on
+    biophysical models that integrate RNAP and transcription factor binding
+    energies to predict condition-specific promoter activity. I use tools like
+    BoltzNet and the Promoter Calculator alongside the Reg-Seq dataset.
+    Key topics: sigma factors, TF-RNAP interactions, Boltzmann distribution
+    applied to gene regulation, high-throughput reporter assays, MoE layers
+    of transcriptional control.
+
+homelab:
+  prometheus:
+    base_url: "http://daemon:9090"
+  hosts:
+    - name: baphomech
+      role: "Primary workstation"
+    - name: malleus
+      role: "NAS / media server"
+    - name: daemon
+      role: "Proxmox hypervisor"
+
+state:
+  db_path: "~/.local/share/io-mcp/state.db"
+
+server:
+  host: "127.0.0.1"
+  port: 8484

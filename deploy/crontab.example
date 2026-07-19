@@ -1,0 +1,14 @@
+# io-mcp cron examples (alternative to the systemd timer).
+#
+# Install with:  crontab -e   (paste the lines below, fixing the venv path)
+# Prefer the systemd timer (deploy/io-mcp-digest.timer) on Fedora; use cron only
+# if you'd rather not deal with user units.
+#
+# Replace /path/to/io-mcp/.venv with your actual environment. For a conda env:
+#   ~/miniconda3/envs/io-mcp/bin/io-mcp
+
+# Run the paper digest at 06:00 every day.
+0 6 * * * /path/to/io-mcp/.venv/bin/io-mcp digest
+
+# Weekly: prune seen-paper state older than 90 days (Sundays at midnight).
+0 0 * * 0 /path/to/io-mcp/.venv/bin/io-mcp digest --dry-run --prune-days 90

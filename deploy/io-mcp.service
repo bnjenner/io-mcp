@@ -1,0 +1,27 @@
+# systemd *user* unit for the io-mcp MCP server.
+#
+# deploy/install.sh --systemd renders @IO_MCP_BIN@ / @REPO_DIR@ and installs this
+# to ~/.config/systemd/user/io-mcp.service. To install by hand, replace the
+# @...@ placeholders with absolute paths and copy it there yourself.
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now io-mcp.service
+#
+# To keep it running while logged out:  loginctl enable-linger $USER
+
+[Unit]
+Description=io-mcp MCP server (Streamable HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO_DIR@
+ExecStart=@IO_MCP_BIN@ serve
+Restart=on-failure
+RestartSec=5
+# Config/state resolve under $HOME by default; override via env if desired:
+# Environment=IO_MCP_SERVER__PORT=8484
+
+[Install]
+WantedBy=default.target

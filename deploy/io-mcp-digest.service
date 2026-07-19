@@ -1,0 +1,12 @@
+# systemd *user* oneshot for the nightly paper digest (paired with the .timer).
+# Rendered + installed by deploy/install.sh --timer.
+
+[Unit]
+Description=io-mcp nightly paper digest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO_DIR@
+ExecStart=@IO_MCP_BIN@ digest
