@@ -60,11 +60,16 @@ async def discover_papers(
     interests = interests if interests is not None else config.research.interests
     ollama = ollama or _ollama_from_config(config)
 
-    # 1. Query both sources for every interest, tolerating per-source failures.
+    # 1. Query both sources for every interest concurrently, tolerating per-source
+    #    failures. The arXiv and S2 rate limiters are independent and process-wide,
+    #    so concurrency overlaps their waits/backoffs without breaking politeness.
+    #    Results are gathered in interest order, keeping attribution deterministic.
+    per_interest = await asyncio.gather(
+        *(_query_interest(interest, since) for interest in interests)
+    )
     raw: list[Paper] = []
     origin: dict[str, str] = {}  # paper id -> interest name (first seen)
-    for interest in interests:
-        papers = await _query_interest(interest, since)
+    for interest, papers in zip(interests, per_interest, strict=True):
         for p in papers:
             raw.append(p)
             origin.setdefault(_dedup_key(p), interest.name)
@@ -115,23 +120,28 @@ def _recency_key(paper: Paper) -> datetime:
 
 
 async def _query_interest(interest, since: date | None) -> list[Paper]:
-    """Query arXiv + Semantic Scholar for one interest; never raises."""
-    results: list[Paper] = []
-    if interest.arxiv_query:
+    """Query arXiv + Semantic Scholar for one interest concurrently; never raises."""
+
+    async def _arxiv() -> list[Paper]:
+        if not interest.arxiv_query:
+            return []
         try:
-            results.extend(
-                await arxiv_mod.search_arxiv(interest.arxiv_query, start_date=since)
-            )
+            return await arxiv_mod.search_arxiv(interest.arxiv_query, start_date=since)
         except Exception as exc:  # noqa: BLE001 — one source failing must not stop the pipeline
             log.warning("arXiv query for %r failed: %s", interest.name, exc)
-    if interest.semantic_scholar_query:
+            return []
+
+    async def _s2() -> list[Paper]:
+        if not interest.semantic_scholar_query:
+            return []
         try:
-            results.extend(
-                await s2_mod.search_papers(interest.semantic_scholar_query)
-            )
+            return await s2_mod.search_papers(interest.semantic_scholar_query)
         except Exception as exc:  # noqa: BLE001
             log.warning("Semantic Scholar query for %r failed: %s", interest.name, exc)
-    return results
+            return []
+
+    arxiv_res, s2_res = await asyncio.gather(_arxiv(), _s2())
+    return [*arxiv_res, *s2_res]
 
 
 # --------------------------------------------------------------------------- #
