@@ -8,15 +8,15 @@
 
 ollama:
   base_url: "http://localhost:11434"
-  default_model: "mistral:7b"
+  default_model: "io-gemma3-14b-16k:latest"
   # Per-tool model overrides (optional)
   models:
-    relevance_scoring: "mistral:7b"
-    summarization: "mistral:7b"
-    log_parsing: "qwen2.5-coder:7b"
+    relevance_scoring: "rnj-1:8b"
+    summarization: "io-gemma3-14b-16k:latest"
+    log_parsing: "rnj-1:8b"
 
 ntfy:
-  base_url: "http://ewaste.tailcf15e9.ts.net"
+  base_url: "http://10.0.0.88"
   default_topic: "io-mcp"
   # Everything publishes to default_topic. To split notifications across topics
   # later, add per-category overrides here, e.g.:
@@ -26,6 +26,13 @@ ntfy:
   topics: {}
 
 research:
+  # Semantic Scholar's unauthenticated API is a shared pool that throttles hard
+  # (HTTP 429). Discovery retries with backoff and degrades gracefully to arXiv,
+  # but a *free* API key gives a dedicated, much higher rate limit. It's read from
+  # the environment (never stored here), so set it where the digest runs:
+  #   export SEMANTIC_SCHOLAR_API_KEY=...   (or the Environment= line in the
+  #   systemd unit — see deploy/io-mcp-digest.service). Key: https://www.semanticscholar.org/product/api#api-key
+  #
   # Search queries for paper discovery. Each interest carries a display name
   # plus a query for each API.
   interests:
@@ -41,7 +48,10 @@ research:
 
   # Relevance scoring
   relevance_threshold: 3  # 1-5 scale; papers >= this get included in the digest
-  max_papers_per_digest: 20
+  max_papers_per_digest: 20  # cap on the final digest output
+  # Cap on how many candidate papers the local model scores each run (0 =
+  # unlimited). Bounds GPU/thermal load on the BC250 — newest papers scored first.
+  max_papers_to_score: 30
 
   # User research context (injected into the relevance-scoring prompt)
   context: |
@@ -56,7 +66,7 @@ research:
 
 homelab:
   prometheus:
-    base_url: "http://daemon:9090"
+    base_url: "http://10.0.0.88:9090"
   hosts:
     - name: baphomech
       role: "Primary workstation"

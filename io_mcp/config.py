@@ -85,6 +85,10 @@ class ResearchConfig:
     interests: list[InterestConfig] = field(default_factory=list)
     relevance_threshold: int = 3
     max_papers_per_digest: int = 20
+    # Cap on how many candidate papers get *scored* by the local model each run
+    # (0 = unlimited). This bounds GPU/thermal load — the newest papers are scored
+    # first. Distinct from max_papers_per_digest, which caps the final output.
+    max_papers_to_score: int = 0
     context: str = ""
 
 
@@ -175,6 +179,7 @@ class Config:
             ],
             relevance_threshold=int(research_d.get("relevance_threshold", 3)),
             max_papers_per_digest=int(research_d.get("max_papers_per_digest", 20)),
+            max_papers_to_score=int(research_d.get("max_papers_to_score", 0)),
             context=research_d.get("context", "") or "",
         )
         prom_d = homelab_d.get("prometheus", {}) or {}

@@ -44,11 +44,27 @@ environment variable with the `IO_MCP_` prefix and `__` nesting:
 
 ```bash
 IO_MCP_OLLAMA__BASE_URL=http://localhost:11434
-IO_MCP_NTFY__BASE_URL=http://malleus:8090
+IO_MCP_NTFY__BASE_URL=http://10.0.0.88
 IO_MCP_SERVER__PORT=8484
 ```
 
 `io-mcp config` prints the fully resolved configuration.
+
+### Semantic Scholar API key (optional)
+
+Paper discovery uses arXiv + Semantic Scholar. The **unauthenticated** Semantic
+Scholar API is a shared, heavily throttled pool (HTTP 429); discovery retries
+with backoff and, if it stays throttled, **degrades gracefully to arXiv alone**.
+For reliable Semantic Scholar results, get a [free API key](https://www.semanticscholar.org/product/api#api-key)
+and expose it in the environment where the digest runs (it is never stored in
+config):
+
+```bash
+export SEMANTIC_SCHOLAR_API_KEY=your-key-here
+```
+
+For the systemd timer, uncomment the `Environment=` line in
+[`deploy/io-mcp-digest.service`](deploy/io-mcp-digest.service).
 
 ## CLI
 
@@ -58,7 +74,7 @@ io-mcp digest              Run discovery → score → digest → notify (ntfy)
   --since YYYY-MM-DD       Override lookback date
   --interests NAME         Restrict to specific interest group(s)
   --prune-days N           Prune seen papers older than N days after the run
-io-mcp search QUERY        One-off paper search (--source arxiv|s2|both, --score)
+io-mcp search QUERY        One-off paper search (--source arxiv|s2|both, --limit N, --score)
 io-mcp status              Homelab host health (--host NAME, --json)
 io-mcp query PROMQL        Raw PromQL query
 io-mcp logs                Summarize logs (--host, --unit, --since, --priority)

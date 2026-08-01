@@ -122,6 +122,34 @@ async def test_discover_papers_skips_seen(monkeypatch, config, fake_ollama):
     await state.close()
 
 
+async def test_discover_papers_caps_scoring_pool(monkeypatch, config, fake_ollama):
+    # 5 candidates with distinct dates; cap scoring at 2 → only the 2 newest score.
+    async def fake_arxiv(query, max_results=50, **kwargs):
+        return [
+            Paper(id=f"p{m}", title=f"Paper {m}", abstract="a", source="arxiv",
+                  published=datetime(2025, m, 1, tzinfo=UTC))
+            for m in range(1, 6)
+        ]
+
+    async def fake_s2(query, limit=50, **kwargs):
+        return []
+
+    monkeypatch.setattr(paper_digest.arxiv_mod, "search_arxiv", fake_arxiv)
+    monkeypatch.setattr(paper_digest.s2_mod, "search_papers", fake_s2)
+    config.research.max_papers_to_score = 2
+
+    state = StateStore(":memory:")
+    await state.init()
+    scored = await paper_digest.discover_papers(
+        config=config, state=state, ollama=fake_ollama
+    )
+    # Only 2 papers were sent to the model (the thermal cap), not all 5.
+    assert len(fake_ollama.calls) == 2
+    # And they are the two newest (May, April).
+    assert {sp.paper.id for sp in scored} == {"p5", "p4"}
+    await state.close()
+
+
 async def test_discover_papers_below_threshold_filtered(monkeypatch, config, fake_ollama):
     async def fake_arxiv(query, max_results=50, **kwargs):
         return [_paper("low", "Low relevance paper")]

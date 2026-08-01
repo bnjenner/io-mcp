@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 
 from io_mcp.config import Config, load_prompt
 from io_mcp.notify import NtfyClient
@@ -80,6 +80,14 @@ async def discover_papers(
                 unseen.append(p)
         deduped = unseen
 
+    # 3b. Cap the scoring pool to bound GPU/thermal load on the BC250. Score the
+    #     newest papers first so the cap trims the stale tail, not fresh results.
+    max_score = config.research.max_papers_to_score
+    if max_score and len(deduped) > max_score:
+        deduped.sort(key=_recency_key, reverse=True)
+        log.info("Capping scoring pool from %d to %d papers", len(deduped), max_score)
+        deduped = deduped[:max_score]
+
     # 4. Score relevance (sequential — small local models on the BC250).
     scored: list[ScoredPaper] = []
     for p in deduped:
@@ -96,6 +104,14 @@ async def discover_papers(
     relevant = [s for s in scored if s.score >= threshold]
     relevant.sort(key=lambda s: s.score, reverse=True)
     return relevant[: config.research.max_papers_per_digest]
+
+
+_EPOCH = datetime.min.replace(tzinfo=UTC)
+
+
+def _recency_key(paper: Paper) -> datetime:
+    """Sort key: newest first, undated papers last (treated as epoch)."""
+    return paper.published or _EPOCH
 
 
 async def _query_interest(interest, since: date | None) -> list[Paper]:
