@@ -150,6 +150,21 @@ async def test_discover_papers_caps_scoring_pool(monkeypatch, config, fake_ollam
     await state.close()
 
 
+async def test_list_tools_describes_each_tool(config):
+    from io_mcp.server import build_server
+
+    mcp = build_server(config)
+    result = await mcp._tool_manager.get_tool("list_tools").fn()
+    names = {t["name"] for t in result}
+    # The core tools are present and list_tools excludes itself.
+    assert {"search_papers", "run_digest", "host_status"} <= names
+    assert "list_tools" not in names
+    # Each entry carries a description and its parameter names.
+    search = next(t for t in result if t["name"] == "search_papers")
+    assert search["description"]
+    assert search["parameters"] == ["limit", "query", "source"]
+
+
 async def test_discover_papers_below_threshold_filtered(monkeypatch, config, fake_ollama):
     async def fake_arxiv(query, max_results=50, **kwargs):
         return [_paper("low", "Low relevance paper")]

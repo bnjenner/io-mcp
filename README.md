@@ -92,7 +92,11 @@ io-mcp serve      # binds server.host:server.port from config, path /mcp
 Connect in Open WebUI: Admin Settings → External Tools → **+ Add Server** →
 **MCP (Streamable HTTP)** → `http://127.0.0.1:8484/mcp`. Exposed tools:
 `search_papers`, `score_paper`, `run_digest`, `recent_papers`, `host_status`,
-`query_prometheus`, `summarize_logs`.
+`query_prometheus`, `summarize_logs`, `list_tools`.
+
+`list_tools` is a self-describing helper: some clients (e.g. Open WebUI) collapse
+the whole server into a single `io-mcp` entry, so the agent can call `list_tools`
+to discover the individual tools with their descriptions and parameters.
 
 ## Development
 

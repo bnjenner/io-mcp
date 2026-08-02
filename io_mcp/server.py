@@ -124,6 +124,25 @@ def build_server(config: Config | None = None) -> FastMCP:
             host, unit=unit, since=since, priority=priority, config=config
         )
 
+    @mcp.tool()
+    async def list_tools() -> list[dict]:
+        """List the individual tools this io-mcp server exposes.
+
+        Handy when a client (e.g. Open WebUI) collapses the whole server into a
+        single 'io-mcp' entry: call this to discover the individual tools, each
+        with a one-line description and its parameter names.
+        """
+        tools = await mcp.list_tools()
+        return [
+            {
+                "name": t.name,
+                "description": (t.description or "").strip().splitlines()[0],
+                "parameters": sorted((t.inputSchema or {}).get("properties", {})),
+            }
+            for t in tools
+            if t.name != "list_tools"
+        ]
+
     return mcp
 
 
