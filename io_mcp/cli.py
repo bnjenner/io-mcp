@@ -68,6 +68,27 @@ def digest(ctx, dry_run, since_str, interest_names, prune_days):
     click.echo(f"\n[{result['count']} relevant papers — {status}]", err=True)
 
 
+@main.command("homelab-digest")
+@click.option("--dry-run", is_flag=True, help="Gather and display without notifying.")
+@click.option("--always", "always_notify", is_flag=True,
+              help="Notify even when everything is healthy (default: only on problems).")
+@click.option("--summarize", is_flag=True,
+              help="Add an Ollama natural-language summary (uses the GPU).")
+@click.pass_context
+def homelab_digest(ctx, dry_run, always_notify, summarize):
+    """Snapshot homelab health (hosts + probes); alert via ntfy on problems."""
+    from io_mcp.tools import homelab_digest as hd
+
+    config = _load_config(ctx)
+    result = asyncio.run(hd.run_homelab_digest(
+        dry_run=dry_run, always_notify=always_notify, summarize=summarize, config=config
+    ))
+    click.echo(result["markdown"])
+    health = "healthy" if result["healthy"] else f"{result['problems']} PROBLEM(S)"
+    sent = "sent" if result["delivered"] else ("dry-run" if dry_run else "not sent")
+    click.echo(f"\n[homelab {health} — {sent}]", err=True)
+
+
 @main.command()
 @click.argument("query")
 @click.option("--source", type=click.Choice(["arxiv", "s2", "both"]), default="both")

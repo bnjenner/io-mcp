@@ -1,0 +1,18 @@
+# systemd *user* timer: run the homelab health digest hourly.
+#
+#   systemctl --user enable --now io-mcp-homelab-digest.timer
+#   systemctl --user list-timers io-mcp-homelab-digest.timer
+#
+# NOTE: the digest is stateless — while a host/endpoint stays down it re-notifies
+# on every run. Widen OnCalendar (or add flap suppression) if that's too chatty.
+
+[Unit]
+Description=Run io-mcp homelab health digest hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

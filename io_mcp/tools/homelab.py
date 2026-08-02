@@ -120,8 +120,87 @@ async def _host_status_one(hostname: str, config: Config) -> dict:
 
 def _instance_matcher(hostname: str) -> str:
     """Regex fragment matching ``host`` or ``host:port`` instance labels."""
+    # PromQL regexes live inside a double-quoted string literal, where a literal
+    # dot must be written as \\. (the backslash is itself escaped in the string).
     escaped = hostname.replace(".", r"\\.")
     return f"{escaped}(:.*)?"
+
+
+# --------------------------------------------------------------------------- #
+# Blackbox probe status (endpoint up/down checks)
+# --------------------------------------------------------------------------- #
+def _probe_target(labels: dict) -> str | None:
+    """The probed endpoint — blackbox puts it in ``instance`` (or ``target``)."""
+    return labels.get("instance") or labels.get("target")
+
+
+def _probe_key(labels: dict) -> tuple:
+    """Identity of a probe across metric families: (target, job)."""
+    return (_probe_target(labels), labels.get("job"))
+
+
+async def _probe_vector(metric: str, config: Config | None) -> list[tuple[dict, float]]:
+    """Instant-query ``metric``; return [(labels, value), ...] ([] on error/empty)."""
+    try:
+        result = await query_prometheus(metric, config=config)
+    except httpx.HTTPError as exc:
+        log.warning("Prometheus query for %s failed: %s", metric, exc)
+        return []
+    out: list[tuple[dict, float]] = []
+    for item in result.get("data", {}).get("result", []):
+        try:
+            out.append((item.get("metric", {}), float(item["value"][1])))
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue
+    return out
+
+
+def _match_value(vec: list[tuple[dict, float]], labels: dict) -> float | None:
+    """Value from ``vec`` whose probe identity matches ``labels``."""
+    key = _probe_key(labels)
+    for lbls, val in vec:
+        if _probe_key(lbls) == key:
+            return val
+    return None
+
+
+async def get_probe_status(
+    target: str | None = None, *, config: Config | None = None
+) -> list[dict]:
+    """Roll up blackbox_exporter probe results (endpoint up/down checks).
+
+    Reads ``probe_success`` (plus duration and HTTP status where present) and
+    returns one row per probed target — down ones first. Requires
+    blackbox_exporter to be scraped by Prometheus. If ``target`` is given, only
+    probes whose endpoint contains that substring are returned.
+    """
+    success = await _probe_vector("probe_success", config)
+    if not success:
+        return [
+            {
+                "note": "No probe_success metrics found — is blackbox_exporter "
+                "scraped by Prometheus?"
+            }
+        ]
+    durations = await _probe_vector("probe_duration_seconds", config)
+    http_codes = await _probe_vector("probe_http_status_code", config)
+
+    rows: list[dict] = []
+    for labels, value in success:
+        name = _probe_target(labels)
+        if target is not None and (name is None or target not in name):
+            continue
+        row: dict = {"target": name, "alive": value >= 1, "job": labels.get("job")}
+        dur = _match_value(durations, labels)
+        if dur is not None:
+            row["duration_s"] = round(dur, 4)
+        code = _match_value(http_codes, labels)
+        if code is not None:
+            row["http_code"] = int(code)
+        rows.append(row)
+    # Down first, then alphabetically by target.
+    rows.sort(key=lambda r: (r["alive"], r["target"] or ""))
+    return rows
 
 
 async def get_service_status(
@@ -178,3 +257,41 @@ def re_escape(s: str) -> str:
     import re
 
     return re.escape(s)
+
+
+# --------------------------------------------------------------------------- #
+# Whole-homelab snapshot
+# --------------------------------------------------------------------------- #
+async def get_homelab_overview(*, config: Config | None = None) -> dict:
+    """Gather a full homelab snapshot: per-host status + all blackbox probes.
+
+    Returns the raw host/probe data plus a ``problems`` rollup and a ``healthy``
+    flag, so callers can decide whether to alert. Purely Prometheus-backed (no
+    GPU/Ollama), so it's cheap enough to run frequently.
+    """
+    config = config or Config.load()
+    hosts = await get_host_status(None, config=config)
+    if isinstance(hosts, dict):  # defensive: get_host_status(None) returns a list
+        hosts = [hosts]
+    probes = await get_probe_status(config=config)
+    # probe_status returns a single {"note": ...} row when blackbox isn't scraped.
+    probes_ok = [p for p in probes if "alive" in p]
+
+    unreachable = [h["host"] for h in hosts if not h.get("reachable")]
+    down_endpoints = [p["target"] for p in probes_ok if p.get("alive") is False]
+
+    return {
+        "hosts": hosts,
+        "probes": probes,
+        "problems": {
+            "unreachable_hosts": unreachable,
+            "down_endpoints": down_endpoints,
+        },
+        "counts": {
+            "hosts_total": len(hosts),
+            "hosts_reachable": len(hosts) - len(unreachable),
+            "probes_total": len(probes_ok),
+            "probes_up": len(probes_ok) - len(down_endpoints),
+        },
+        "healthy": not unreachable and not down_endpoints,
+    }

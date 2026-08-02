@@ -1,0 +1,17 @@
+# systemd *user* oneshot for the homelab health digest (paired with the .timer).
+# Rendered + installed by deploy/install.sh. Prometheus-only by default (no GPU);
+# notifies via ntfy only when something is wrong.
+
+[Unit]
+Description=io-mcp homelab health digest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO_DIR@
+ExecStart=@IO_MCP_BIN@ homelab-digest
+# Add --always for a heartbeat even when healthy, or --summarize for an Ollama
+# natural-language summary (uses the GPU — off by default on the thermally
+# limited BC250). Example:
+# ExecStart=@IO_MCP_BIN@ homelab-digest --always

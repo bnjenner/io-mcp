@@ -106,6 +106,74 @@ def build_server(config: Config | None = None) -> FastMCP:
         return await homelab_mod.query_prometheus(query, config=config)
 
     @mcp.tool()
+    async def homelab_overview() -> dict:
+        """One-call homelab health snapshot: every host + all blackbox probes.
+
+        Returns per-host status and probe results, plus a 'problems' rollup
+        (unreachable hosts, down endpoints) and a 'healthy' flag. Prometheus-only
+        (no GPU), so it's cheap to call often.
+        """
+        return await homelab_mod.get_homelab_overview(config=config)
+
+    @mcp.tool()
+    async def send_notification(
+        message: str,
+        title: str | None = None,
+        priority: int = 3,
+        tags: list[str] | None = None,
+        topic: str | None = None,
+    ) -> dict:
+        """Send a push notification to the user's phone via ntfy.
+
+        Args:
+            message: Notification body (markdown supported).
+            title: Optional notification title.
+            priority: 1 (min) to 5 (max); default 3.
+            tags: Optional ntfy tags/emoji (e.g. ['warning'], ['white_check_mark']).
+            topic: Optional ntfy topic override; defaults to the configured topic.
+        """
+        from io_mcp.notify import NtfyClient
+
+        client = NtfyClient(
+            base_url=config.ntfy.base_url, default_topic=config.ntfy.default_topic
+        )
+        dest = topic or config.ntfy.topic_for()
+        delivered = await client.send(
+            message, topic=dest, title=title, priority=priority, tags=tags,
+            markdown=True,
+        )
+        return {"delivered": delivered, "topic": dest}
+
+    @mcp.tool()
+    async def probe_status(target: str | None = None) -> list[dict]:
+        """Report blackbox_exporter probe results — which endpoints are up or down.
+
+        Reads Prometheus probe_success (plus latency and HTTP status) and returns
+        one row per probed target, down ones first. Requires blackbox_exporter
+        scraped by Prometheus.
+
+        Args:
+            target: Optional substring to filter probed endpoints (e.g. 'grafana').
+        """
+        return await homelab_mod.get_probe_status(target, config=config)
+
+    @mcp.tool()
+    async def service_status(
+        host: str, services: list[str] | None = None
+    ) -> list[dict]:
+        """Check systemd unit states on a host via node_exporter's systemd collector.
+
+        Requires node_exporter started with --collector.systemd. Returns a note if
+        no such metrics are available.
+
+        Args:
+            host: Host to query.
+            services: Optional unit names to filter (e.g. ['sshd.service']);
+                omit to list all active units.
+        """
+        return await homelab_mod.get_service_status(host, services, config=config)
+
+    @mcp.tool()
     async def summarize_logs(
         host: str = "localhost",
         unit: str | None = None,

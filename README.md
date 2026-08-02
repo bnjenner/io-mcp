@@ -75,6 +75,10 @@ io-mcp digest              Run discovery → score → digest → notify (ntfy)
   --interests NAME         Restrict to specific interest group(s)
   --prune-days N           Prune seen papers older than N days after the run
 io-mcp search QUERY        One-off paper search (--source arxiv|s2|both, --limit N, --score)
+io-mcp homelab-digest      Snapshot homelab health; alert via ntfy on problems
+  --dry-run                Show results without notifying
+  --always                 Notify even when everything is healthy
+  --summarize              Add an Ollama natural-language summary (uses the GPU)
 io-mcp status              Homelab host health (--host NAME, --json)
 io-mcp query PROMQL        Raw PromQL query
 io-mcp logs                Summarize logs (--host, --unit, --since, --priority)
@@ -92,7 +96,8 @@ io-mcp serve      # binds server.host:server.port from config, path /mcp
 Connect in Open WebUI: Admin Settings → External Tools → **+ Add Server** →
 **MCP (Streamable HTTP)** → `http://127.0.0.1:8484/mcp`. Exposed tools:
 `search_papers`, `score_paper`, `run_digest`, `recent_papers`, `host_status`,
-`query_prometheus`, `summarize_logs`, `list_tools`.
+`service_status`, `probe_status`, `homelab_overview`, `query_prometheus`,
+`send_notification`, `summarize_logs`, `list_tools`.
 
 `list_tools` is a self-describing helper: some clients (e.g. Open WebUI) collapse
 the whole server into a single `io-mcp` entry, so the agent can call `list_tools`
